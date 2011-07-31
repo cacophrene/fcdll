@@ -142,7 +142,7 @@ val append : 'a fcdll -> 'a fcdll -> 'a fcdll
 (** [append t1 t2] returns a fresh list containing the concatenation of lists
   * [t1] and [t2]. *)
   
-val flatten : 'a fcdll fcdll -> 'a fcdll
+val flatten : ?rev:bool -> 'a fcdll fcdll -> 'a fcdll
 (** [Fcdll.flatten t] concatenates the given list of lists [t]. The elements of 
   * the argument are all concatenated together in the same order to give the 
   * result. {b Note} : this function is equivalent to 

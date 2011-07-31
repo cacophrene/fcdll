@@ -410,7 +410,7 @@ let fold ?(rev = false) p e = function
         loop (i + 1) r' (f t)
     in loop 0 e (g h)
 
-let flatten t = fold append empty t
+let flatten ?rev t = fold ?rev append empty t
 
 let foldi ?(rev = false) p e = function
   | None -> e
