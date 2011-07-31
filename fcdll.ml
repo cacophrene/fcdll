@@ -254,20 +254,22 @@ let exists ?(rev = false) p = function
 let for_all2 ?(rev = false) f = function
   | None -> (function None -> true | _ -> invalid_arg "Fcdll.for_all2")
   | Some (n1, h1) -> (function
-    | Some (n2, h2) when n1 = n2 -> let f1, f2, g1, g2 = Cell.choose2 rev in
+    | None -> invalid_arg "Fcdll.for_all2"
+    | Some (n2, h2) -> let n = max n1 n2 in
+      let f1, f2, g1, g2 = Cell.choose2 rev in
       let rec loop i t1 t2 =
-        i = n1 || Cell.(f !(data t1) !(data t2) && loop (i + 1) (f1 t1) (f2 t2))
-      in loop 0 (g1 h1) (g2 h2)
-    | _ -> invalid_arg "Fcdll.for_all2")
+        i = n || Cell.(f !(data t1) !(data t2) && loop (i + 1) (f1 t1) (f2 t2))
+      in loop 0 (g1 h1) (g2 h2))
 
 let exists2 ?(rev = false) f = function
   | None -> (function None -> false | _ -> invalid_arg "Fcdll.exists2")
   | Some (n1, h1) -> (function
-    | Some (n2, h2) when n1 = n2 -> let f1, f2, g1, g2 = Cell.choose2 rev in
+    | None -> invalid_arg "Fcdll.exists2"
+    | Some (n2, h2) -> let n = max n1 n2 in
+      let f1, f2, g1, g2 = Cell.choose2 rev in
       let rec loop i t1 t2 =
-        i < n1 && Cell.(f !(data t1) !(data t2) || loop (i + 1) (f1 t1) (f2 t2))
-      in loop 0 (g1 h1) (g2 h2)
-    | _ -> invalid_arg "Fcdll.exists2")
+        i < n && Cell.(f !(data t1) !(data t2) || loop (i + 1) (f1 t1) (f2 t2))
+      in loop 0 (g1 h1) (g2 h2))
 
 let mem ?(rev = false) ?(eq = (=)) x = function
   | None -> false
