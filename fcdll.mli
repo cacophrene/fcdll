@@ -13,8 +13,11 @@
   *   - As a consequence, side effects should be avoided.
   *   - Huge lists (up to [max_int] elements) are easy to create. 
   *
-  * {b Important note} : creating many long-lived fcdlls have a big impact on
-  * garbage collection. This could result in unexpected slowness. *)
+  * {b Important note} : in OCaml [List] module, some functions need two lists 
+  * of same length (say, for example, [iter2]). In this module, however, there 
+  * is no need for such a constraint because it is always possible to cycle to 
+  * the first element. Please keep this in mind when playing with such 
+  * functions. *)
 
 type 'a fcdll
 (** The type for functional (immutable) circular doubly linked lists. *)
@@ -43,11 +46,10 @@ val init : int -> (int -> 'a) -> 'a fcdll
   * @raise Invalid_argument if [n < 0]. *)
 
 val rep : int -> 'a fcdll -> 'a fcdll
-(** [Fcdll.rep n t] repeats [n] times the elements of [t]. This function is 
-  * useful when working with functions such as [map2], which require lists of
-  * same length. {b Important note} : If [t] contains mutable elements, their 
-  * are shared among all occurrences in the list, and modifying them through one
-  * of the list entries will modify all other entries at the same time. *)
+(** [Fcdll.rep n t] repeats [n] times the elements of [t]. {b Important note} : 
+  * If [t] contains mutable elements, they will be shared by all occurrences in 
+  * the list, and modifying them through one of the list entries will modify all 
+  * other entries at the same time. *)
 
 
 
@@ -148,6 +150,29 @@ val flatten : 'a fcdll fcdll -> 'a fcdll
 
 
 
+(** {2 List searching}
+  * Searching functions have an optional [rev] argument which determine the 
+  * sense of the traversal. Use [true] for reverse order. Default value is 
+  * [false]. *)
+
+val find : ?rev:bool -> ('a -> bool) -> 'a fcdll -> 'a
+(** [Fcdll.find p t] returns the first element of the list [t] that satisfies 
+  * the predicate [p].
+  * @raise Not_found if there is no value that satisfies [p] in the list [t]. *)
+
+val find_all : ?rev:bool -> ('a -> bool) -> 'a fcdll -> 'a fcdll
+(** [Fcdll.find_all p t] returns all the elements of the list [t] that satisfy 
+  * the predicate [p]. The order of the elements in the input list is 
+  * preserved. *)
+
+val partition : ?rev:bool -> ('a -> bool) -> 'a fcdll -> 'a fcdll * 'a fcdll
+(** [Fcdll.partition p t] returns a pair of lists [(t1, t2)], where [t1] is the 
+  * list of all the elements of [t] that satisfy the predicate [p], and [t2] is 
+  * the list of all the elements of [t] that do not satisfy [p]. The order of 
+  * the elements in the input list is preserved. *)
+
+
+
 (** {2 List scanning} 
   * Scanning functions have an optional [rev] argument which determine the sense
   * of the traversal. Use [true] for reverse order. Default value is [false]. *)
@@ -188,7 +213,15 @@ val mem_assoc :
   ?rev:bool -> 
   ?eq:('a -> 'a -> bool) -> 'a -> ('a * 'b) fcdll -> bool
 
-val find : ?rev:bool -> (int -> 'a -> bool) -> 'a fcdll -> 'a
+val split : ?rev:bool -> ('a * 'b) fcdll -> 'a fcdll * 'b fcdll
+(** [Fcdll.split t] transforms the list of pairs [t] into a pair of lists. The
+  * first list contains the first elements of the pairs, and the second list
+  * contains the second elements of the pairs. *)
+
+val combine : ?rev:bool -> 'a fcdll -> 'b fcdll -> ('a * 'b) fcdll
+(** [Fcdll.combine t1 t2] transforms a pair of lists [t1] and [t2] into a list 
+  * of pairs [(t1i, t2i)] with [0 <= i < max (length t1) (lengtht t2)].
+  * @raise Invalid_argument if [is_empty t1 xor is_empty t2] is true. *)
 
 
 
@@ -203,13 +236,13 @@ val iteri : ?rev:bool -> (int -> 'a -> unit) -> 'a fcdll -> unit
 (** Same as [iter], but [f] receives the index of the element as first argument. 
   * The head element has index [0]. *)
 
-val map : ('a -> 'b) -> 'a fcdll -> 'b fcdll
+val map : ?rev:bool -> ('a -> 'b) -> 'a fcdll -> 'b fcdll
 (** [map f t] builds a new list by applying function [f] to every element of 
   * [t]. *)
 
-val mapi : (int -> 'a -> 'b) -> 'a fcdll -> 'b fcdll
-(** Same as [map], but [f] receives the index of the element as first argument. 
-  * The head element has index [0]. *)
+val mapi : ?rev:bool -> (int -> 'a -> 'b) -> 'a fcdll -> 'b fcdll
+(** Same as [map], but [f] receives the index of the element as first 
+  * argument. *)
 
 val fold : ?rev:bool -> ('a -> 'b -> 'a) -> 'a -> 'b fcdll -> 'a
 (** [fold f e t] computes [f (... (f (f e x0) x1) ...) xN]. The optional 
@@ -227,20 +260,23 @@ val move : (int -> 'a -> int) -> 'a fcdll -> unit
 
 
 
-(** {2 Iterators on two lists} *)
+(** {2 Iterators on two lists} 
+  * These functions can be applied to lists of different sizes. However, if one
+  * of the two lists is empty, then the second {i must} also be empty, or the
+  * function will raise [Invalid_argument]. *)
 
 val iter2 : ?rev:bool -> ('a -> 'b -> unit) -> 'a fcdll -> 'b fcdll -> unit
 (** Same as [Fcdll.iter], but for a two-argument function.
-  * @raise Invalid_argument if the given lists do not have the same length. *)
+  * @raise Invalid_argument if [is_empty t1 xor is_empty t2] is true. *)
 
 val map2 : ('a -> 'b -> 'c) -> 'a fcdll -> 'b fcdll -> 'c fcdll
 (** Same as [Fcdll.map], but for a two-argument function.
-  * @raise Invalid_argument if the given lists do not have the same length. *)
+  * @raise Invalid_argument if [is_empty t1 xor is_empty t2] is true. *)
 
 val fold2 : ?rev:bool -> 
   ('a -> 'b -> 'c -> 'a) -> 'a -> 'b fcdll -> 'c fcdll -> 'a
 (** Same as [Fcdll.fold], but for a two-argument function.
-  * @raise Invalid_argument if the given lists do not have the same length. *)
+  * @raise Invalid_argument if [is_empty t1 xor is_empty t2] is true. *)
 
 
 (** {2 Sorting} 

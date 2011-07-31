@@ -4,12 +4,37 @@
  *  - doc: ocamldoc -html -colorize-code -stars -d html -t "Fcdll 1.0" fcdll.mli
  *)
 
+(* Bonjour,
+
+  J'ai déjà eu l'occasion de vous parler des listes doublement chaînées 
+  circulaires sur ce blog. À cette occasion, je vous ai présenté la façon la 
+  plus courante d'implémenter ces listes, à base de champs mutables et à
+  évaluation immédiate. Ce n'est cependant pas la seule manière de procéder.
+  C'est pourquoi je vous propose aujourd'hui de revenir sur ce problème pour 
+  explorer ensemble une version immutable et à évaluation retardée. 
+  Contrairement à la précédente, cette nouvelle implémentation donne des listes
+  dont la manipulation rappelle fortement le module [List] d'OCaml. *)
+
+(* Une liste doublement chaînée est une succession de cellules constituées de 
+  trois éléments : une valeur (data), un lien vers la cellule suivante (next) et
+  un lien vers la cellule précédente (prev). Cette liste devient circulaire dès
+  lors que le prédécesseur du premier élément est le dernier élément, et le 
+  successeur du dernier élément le premier élément.
+  
+  J'ai volontairement choisi d'implémenter l'évaluation retardée avec des 
+  fonctions pour montrer que le module Lazy n'est pas indispensable. Il faut
+  cependant noter que, contrairement au module Lazy qui permet de ne calculer 
+  qu'une seule fois chaque valeur, l'utilisation de fonctions se traduit par le 
+  calcul systématique des valeurs à chaque fois qu'elles sont nécessaires. *)
+
 type 'a cell = {
   data : unit -> 'a; 
   prev : unit -> 'a cell; 
   next : unit -> 'a cell;
 }
 
+(* La surcharge des opérateurs n'est pas considérée comme une bonne pratique de
+  programmation en OCaml, parce qu'elle est source d'erreurs. Dans *)
 let ( ! ) f = f ()
 external id : 'a -> 'a = "%identity"
 
@@ -25,22 +50,36 @@ module Cell =
   let rec prevN t = function 0 -> t | i -> prevN !t.prev (i - 1)
  end
 
+(* OCaml dispose d'un type 'a option dont les constructeurs sont précisément 
+  Some et None. Cette nouvelle définition, que l'on peut voir comme un cas 
+  particulier du type 'a option, est surtout motivée par la lisibilité du code
+  ainsi obtenu. *)
 type 'a fcdll = None | Some of int * (unit -> 'a cell)
 
+(* Deux fonctions auxiliaires pour le calcul des index. S'agissant de structures
+  cycliques, on pourrait aussi utiliser un modulo. *)
 let ( <-- ) i n = if i = 0 then n - 1 else i - 1
 let ( --> ) i n = if i = n - 1 then 0 else i + 1
 
+(* La liste vide et le test associé. *)
 let empty = None
 let is_empty t = t = None
 
+(* Longueur de la liste. Cette donnée est stockée car elle est utilisée par
+  presque toutes les fonctions de ce module. *)
 let length = function None -> 0 | Some (n, _) -> n
 
+(* La fonction make crée une liste composée de n éléments qui comportent tous la
+  même valeur x. Dans le cas présent, il suffit de définir une structure 
+  cyclique comme on le ferait dans la version impérative. *)
 let make n x =
   if n = 0 then None else
   if n < 0 then invalid_arg "Fcdll.make" else
   let rec next () = {data = Cell.from x; next; prev = next} in
   Some (n, next)
 
+(* La fonction init. Il s'agit d'une généralisation de make dans laquelle les 
+  éléments de la liste sont initialisés par application d'une fonction f. *)
 let init n f =
   if n = 0 then None else
   if n < 0 then invalid_arg "Fcdll.init" else
@@ -50,6 +89,9 @@ let init n f =
     next = loop (i --> n);
   } in Some (n, loop 0)
 
+(* Fonction rep destinée à répéter n fois le contenu de la liste. Cette fonction
+ * est très utile pour utiliser les fonctions du type [map2] qui nécessitent des
+ * listes de même taille. *)
 let rep k = function
   | None -> None
   | Some (n, h) -> Some (k * n, h)
@@ -58,7 +100,7 @@ let compare = function
   | None -> (function None -> 0 | _ -> -1)
   | Some (n1, h1) -> (function
     | None -> 1
-    | Some (n2, h2) -> let r = compare n1 n2 in
+    | Some (n2, h2) -> let r = Pervasives.compare n1 n2 in
       if r <> 0 then r else 
         let rec loop i t1 t2 =
           if i = n1 then 0 else
@@ -66,20 +108,33 @@ let compare = function
             if r = 0 then loop (i + 1) (Cell.next t1) (Cell.next t2) else r
         in loop 0 h1 h2)
 
+(* La fonction succ décale la liste de sorte que le deuxième élément arrive en 
+  tête de liste. Le premier élément se trouve rejeté en dernière position. À
+  l'inverse, la fonction pred décale les éléments de la liste de sorte que le 
+  dernier élément arrive en première position. *)
 let move f = function None -> None | Some (n, h) -> Some (n, f h)  
 let succ t = move Cell.next t
 let pred t = move Cell.prev t
 
+(* La fonction head équivaut à List.hd. Elle renvoie la valeur stockée dans
+  la première cellule de la liste. *)
 let head = function
   | None -> invalid_arg "Fcdll.head"
   | Some (_, h) -> Cell.data h ()
   
+(* La fonction rotate permet de modifier l'élément qui occupe la tête de liste.
+  Les appels rotate 1 t et rotate (-1) t équivalent resp. aux fonctions succ et
+  pred. Cette fonction est déterminante pour blit, fill et sub ci-dessous. *)
 let rotate = function
   | 0 -> id
   | k -> (function
     | None -> None
     | Some (n, h) -> Some (n, Cell.(if k < 0 then prevN else nextN) h (abs k)))
 
+(* La fonction blit est inspirée de la fonction Array.blit. Elle permet de 
+  recopier toutes les valeurs d'une liste source dans une liste de destination
+  plus longue. Le premier élément de la liste de destination sert de point de
+  départ pour la copie. *)
 let blit = 
   let aux k = function
     | None -> id
@@ -95,6 +150,10 @@ let blit =
   in (fun ~src ~src_pos ~dst ~dst_pos ~len -> 
     rotate (-dst_pos) (aux len (rotate src_pos src) (rotate dst_pos dst)))
 
+(* La fonction Fcdll.fill est inspirée de la fonction Array.fill. Elle consiste à
+  remplacer les éléments d'index [pos; pos + len - 1] par une valeur x reçue en
+  entrée. Dans le cas présent, les valeurs négatives de pos sont acceptées et se
+  traduisent par un retour aux derniers éléments de la liste. *)
 let fill = 
   let aux = function
     | None -> make
@@ -107,6 +166,7 @@ let fill =
       } in Some (n, f 0 h))
   in (fun t ~pos ~len x -> rotate (-pos) (aux (rotate pos t) len x))
 
+(* La fonction Fcdll.sub extrait la sous-liste d'une  *)
 let sub = 
   let aux = function
     | None -> (fun _ -> invalid_arg "Fcdll.sub")
@@ -133,6 +193,8 @@ let tail = function
           (if i = n' then Cell.next y else y);
     } in Some (n', loop 1 (Cell.next h))
   
+(* La fonction set modifie la valeur stockée en tête de liste. Si la liste est
+  vide, la fonction se comporte comme make 1 et crée une liste à un élément. *)
 let set x = function
   | None -> make 1 x
   | Some (n, h) ->
@@ -151,8 +213,13 @@ let cons x = function
       next = if i = 0 then loop 1 t else loop (i --> m) (Cell.next t);
     } in Some (m, loop 0 h)
 
+(* Si on réutilise ce symbole obsolète en OCaml, on obtient un moyen pratique
+  d'ajouter un élément en tête de liste. À cette occasion, je rappelle que 
+  l'ajout en fin de liste s'obtient avec [succ (cons x t)]. *)
 let ( & ) = cons
 
+(* La fonction append reçoit deux listes en entrée et renvoie la liste 
+  constituée *)
 let append = function
   | None -> (fun c2 -> c2)
   | Some (n, h1) as c1 -> (function
@@ -166,6 +233,9 @@ let append = function
           (Cell.prev (if i = 0 then h2 else if i = n then h1 else t));
       } in Some (n', loop 0 h1))
 
+(* Inverse l'ordre des éléments de la liste. Cette fonction n'est pas très utile
+  dans le cas des listes doublement chaînées puisqu'il suffit de changer le sens
+  du parcours pour inverser l'ordre des éléments. *)
 let rev = function
   | None -> None
   | Some (n, h) ->
@@ -173,226 +243,6 @@ let rev = function
       {!t with prev = loop (Cell.next t); next = loop (Cell.prev t)}
     in Some (n, loop (Cell.prev h))
 
-
-
-(* ***** List scanning ***** *)
-
-let for_all ?(rev = false) p = function
-  | None -> true
-  | Some (n, h) -> let f, g = Cell.choose rev in
-    let rec loop i t =
-      i = n || (p !(Cell.data t) && loop (i + 1) (f t))
-    in loop 0 (g h)
-
-let exists ?(rev = false) p = function
-  | None -> false
-  | Some (n, h) -> let f, g = Cell.choose rev in
-    let rec loop i t =
-      i < n && (p !(Cell.data t) || loop (i + 1) (f t))
-    in loop 0 (g h)
-
-let for_all2 ?(rev = false) f = function
-  | None -> (function None -> true | _ -> invalid_arg "Fcdll.for_all2")
-  | Some (n1, h1) -> (function
-    | Some (n2, h2) when n1 = n2 -> let f1, f2, g1, g2 = Cell.choose2 rev in
-      let rec loop i t1 t2 =
-        i = n1 || Cell.(f !(data t1) !(data t2) && loop (i + 1) (f1 t1) (f2 t2))
-      in loop 0 (g1 h1) (g2 h2)
-    | _ -> invalid_arg "Fcdll.for_all2")
-
-let exists2 ?(rev = false) f = function
-  | None -> (function None -> false | _ -> invalid_arg "Fcdll.exists2")
-  | Some (n1, h1) -> (function
-    | Some (n2, h2) when n1 = n2 -> let f1, f2, g1, g2 = Cell.choose2 rev in
-      let rec loop i t1 t2 =
-        i < n1 && Cell.(f !(data t1) !(data t2) || loop (i + 1) (f1 t1) (f2 t2))
-      in loop 0 (g1 h1) (g2 h2)
-    | _ -> invalid_arg "Fcdll.exists2")
-
-let mem ?(rev = false) ?(eq = (=)) x = function
-  | None -> false
-  | Some (n, h) -> let f, g = Cell.choose rev in
-    let rec loop i t =
-      i < n && (eq x !(Cell.data t) || loop (i + 1) (f t))
-    in loop 0 (g h)
-
-
-
-(* ***** Association lists ***** *)
-
-module AssocImpl =
- struct
-  let forward eq = function
-    | None -> raise Not_found
-    | Some (n, h) ->
-      let rec loop i {data; next; _} =
-        if i = n then raise Not_found
-        else if eq (fst !data) then snd !data 
-        else loop (i + 1) !next
-      in loop 0 !h
-  let reverse eq = function
-    | None -> raise Not_found
-    | Some (n, h) ->
-      let rec loop i {data; prev; _} =
-        if i < 0 then raise Not_found 
-        else if eq (fst !data) then snd !data
-        else loop (i - 1) !prev
-      in loop (n - 1) !(!h.prev)
- end
-
-let assoc ?(rev = false) ?(eq = (=)) e =
-  AssocImpl.(if rev then reverse else forward) (eq e)
-
-module MemAssocImpl =
- struct
-  let forward eq = function
-    | None -> false
-    | Some (n, h) ->
-      let rec loop i {data; next; _} =
-        i < n && (eq (fst !data) || loop (i + 1) !next)
-      in loop 0 !h
-  let reverse eq = function
-    | None -> false
-    | Some (n, h) ->
-      let rec loop i {data; next; _} =
-        i < n && (eq (fst !data) || loop (i - 1) !next)
-      in loop (n - 1) !(!h.prev)
- end
-
-let mem_assoc ?(rev = false) ?(eq = (=)) e =
-  MemAssocImpl.(if rev then reverse else forward) (eq e)
-
-module FindImpl =
- struct
-  let forward f = function
-    | None -> raise Not_found
-    | Some (n, h) ->
-      let rec loop i {data; next; _} =
-        if i < n then
-          let x = !data in
-          if f i x then x else loop (i + 1) !next
-        else raise Not_found
-      in loop 0 !h 
-  let reverse f = function
-    | None -> raise Not_found
-    | Some (n, h) ->
-      let rec loop i {data; prev; _} =
-        if i >= 0 then
-          let x = !data in
-          if f i x then x else loop (i - 1) !prev
-        else raise Not_found
-      in loop (n - 1) !(!h.prev)
- end
-
-let find ?(rev = false) e = 
-  FindImpl.(if rev then reverse else forward) e
-
-
-
-(* ***** Iterators ***** *)
-
-let iter ?(rev = false) p = function
-  | None -> ()
-  | Some (n, h) -> let f, g = Cell.choose rev in
-    let rec loop i t =
-      if i < n then
-        let () = p !(Cell.data t) in
-        loop (i + 1) (f t)
-    in loop 0 (g h)
-
-let iteri ?(rev = false) p = function
-  | None -> ()
-  | Some (n, h) -> let f, g = Cell.choose rev in
-    let rec loop i t =
-      if i < n then
-        let () = p i !(Cell.data t) in
-        loop (i + 1) (f t)
-    in loop 0 (g h)
-
-let map f = function
-  | None -> None
-  | Some (n, h) ->
-    let rec loop i t () = {
-      data = (fun () -> f !(Cell.data t));
-      prev = loop (i <-- n) (Cell.prev t);
-      next = loop (i --> n) (Cell.next t);
-    } in Some (n, loop 0 h)
-
-let mapi f = function
-  | None -> None
-  | Some (n, h) ->
-    let rec loop i t () = {
-      data = (fun () -> f i !(Cell.data t));
-      prev = loop (i <-- n) (Cell.prev t);
-      next = loop (i --> n) (Cell.next t);
-    } in Some (n, loop 0 h)
-
-let fold ?(rev = false) p e = function
-  | None -> e
-  | Some (n, h) -> let f, g = Cell.choose rev in
-    let rec loop i r t =
-      if i = n then r else
-        let r' = p r !(Cell.data t) in
-        loop (i + 1) r' (f t)
-    in loop 0 e (g h)
-
-let flatten t = fold append empty t
-
-let foldi ?(rev = false) p e = function
-  | None -> e
-  | Some (n, h) -> let f, g = Cell.choose rev in
-    let rec loop i r t =
-      if i = n then r else
-        let r' = p i r !(Cell.data t) in
-        loop (i + 1) r' (f t)
-    in loop 0 e (g h)
-
-let move f = function
-  | None -> ()
-  | Some (n, h) ->
-    let rec loop i {data; prev; next} =
-      let r = f i !data in
-      if r < 0 then loop (i <-- n) !prev else
-      if r > 0 then loop (i --> n) !next
-    in loop 0 !h
-
-
-
-(* ***** Iterators for two-argument functions ***** *)
-
-let iter2 ?(rev = false) p = function
-  | None -> (function None -> () | _ -> invalid_arg "Fcdll.iter2")
-  | Some (n1, h1) -> (function
-    | Some (n2, h2) when n1 = n2 -> let f1, f2, g1, g2 = Cell.choose2 rev in
-      let rec loop i t1 t2 =
-        if i < n1 then
-          let () = p !(Cell.data t1) !(Cell.data t2) in
-          loop (i + 1) (f1 t1) (f2 t2)
-      in loop 0 (g1 h1) (g2 h2)
-    | _ -> invalid_arg "Fcdll.iter2")
-
-let map2 f = function
-  | None -> (function None -> None | _ -> invalid_arg "Fcdll.map2")
-  | Some (n1, h1) -> (function
-    | Some (n2, h2) ->
-      let rec loop t1 t2 () = {
-        data = (fun () -> f !(Cell.data t1) !(Cell.data t2));
-        next = loop (Cell.next t1) (Cell.next t2);
-        prev = loop (Cell.prev t1) (Cell.prev t2);
-      } in Some (n1, loop h1 h2)
-    | _ -> invalid_arg "Fcdll.map2")
-  
-let fold2 ?(rev = false) p e = function
-  | None -> (function None -> e | _ -> invalid_arg "Fcdll.fold2")
-  | Some (n1, h1) -> (function
-    | Some (n2, h2) when n1 = n2 -> let f1, f2, g1, g2 = Cell.choose2 rev in
-      let rec loop i r t1 t2 =
-        if i = n1 then r else
-          let r' = p r !(Cell.data t1) !(Cell.data t2) in
-          loop (i + 1) r' (f1 t1) (f2 t2)
-      in loop 0 e (g1 h1) (g2 h2)
-    | _ -> invalid_arg "Fcdll.fold2")
-  
 
 
 (* ***** Conversion ***** *)
@@ -453,6 +303,240 @@ let of_array ?(rev = false) t =
 let of_list ?rev t = of_array ?rev (Array.of_list t)
 let to_array ?rev t = Array.of_list (to_list ?rev t)
 
+
+
+(* ***** List scanning ***** *)
+
+let for_all ?(rev = false) p = function
+  | None -> true
+  | Some (n, h) -> let f, g = Cell.choose rev in
+    let rec loop i t =
+      i = n || (p !(Cell.data t) && loop (i + 1) (f t))
+    in loop 0 (g h)
+
+let exists ?(rev = false) p = function
+  | None -> false
+  | Some (n, h) -> let f, g = Cell.choose rev in
+    let rec loop i t =
+      i < n && (p !(Cell.data t) || loop (i + 1) (f t))
+    in loop 0 (g h)
+
+let for_all2 ?(rev = false) f = function
+  | None -> (function None -> true | _ -> invalid_arg "Fcdll.for_all2")
+  | Some (n1, h1) -> (function
+    | Some (n2, h2) when n1 = n2 -> let f1, f2, g1, g2 = Cell.choose2 rev in
+      let rec loop i t1 t2 =
+        i = n1 || Cell.(f !(data t1) !(data t2) && loop (i + 1) (f1 t1) (f2 t2))
+      in loop 0 (g1 h1) (g2 h2)
+    | _ -> invalid_arg "Fcdll.for_all2")
+
+let exists2 ?(rev = false) f = function
+  | None -> (function None -> false | _ -> invalid_arg "Fcdll.exists2")
+  | Some (n1, h1) -> (function
+    | Some (n2, h2) when n1 = n2 -> let f1, f2, g1, g2 = Cell.choose2 rev in
+      let rec loop i t1 t2 =
+        i < n1 && Cell.(f !(data t1) !(data t2) || loop (i + 1) (f1 t1) (f2 t2))
+      in loop 0 (g1 h1) (g2 h2)
+    | _ -> invalid_arg "Fcdll.exists2")
+
+let mem ?(rev = false) ?(eq = (=)) x = function
+  | None -> false
+  | Some (n, h) -> let f, g = Cell.choose rev in
+    let rec loop i t =
+      i < n && (eq x !(Cell.data t) || loop (i + 1) (f t))
+    in loop 0 (g h)
+
+
+
+(* ***** Association lists ***** *)
+
+let assoc ?(rev = false) ?(eq = ( = )) x = function
+  | None -> raise Not_found
+  | Some (n, h) -> let f, g = Cell.choose rev in
+    let rec loop i t =
+      if i = n then raise Not_found else
+        let a, b = !(Cell.data t) in
+        if eq x a then b else loop (i + 1) (f t)
+    in loop 0 (g h)
+
+let mem_assoc ?(rev = false) ?(eq = ( = )) x = function
+  | None -> false
+  | Some (n, h) -> let f, g = Cell.choose rev in
+    let rec loop i t =
+      i < n && (eq x (fst !(Cell.data t)) || loop (i + 1) (f t))
+    in loop 0 (g h)
+    
+let split ?(rev = false) = function
+  | None -> None, None
+  | Some (n, h) -> 
+    let f1, f2, g = Cell.(if rev then prev, next, prev else next, prev, id) in
+    let rec loop i t =
+      let d = Cell.data t in
+        (fun () ->
+        { data = (fun () -> fst !d); 
+          next = fst (loop (i --> n) (f1 t));
+          prev = fst (loop (i <-- n) (f2 t));
+        }), (fun () -> { 
+          data = (fun () -> snd !d);
+          next = snd (loop (i --> n) (f1 t));
+          prev = snd (loop (i <-- n) (f2 t));
+     }) in let a, b = loop 0 (g h) in Some (n, a), Some (n, b)
+
+let combine ?(rev = false) = function
+  | None -> (function None -> None | _ -> invalid_arg "Fcdll.combine")
+  | Some (n1, h1) -> (function
+    | None -> invalid_arg "Fcdll.empty"
+    | Some (n2, h2) -> let n = max n1 n2 in
+      let f1, f2, g1, g2 = Cell.choose2 rev in
+      let f3, f4, _, _ = Cell.choose2 (not rev) in
+      let rec loop i t1 t2 () = {
+        data = (fun () -> !(Cell.data t1), !(Cell.data t2));
+        next = loop (i --> n) (f1 t1) (f2 t2);
+        prev = loop (i <-- n) (f3 t1) (f4 t2);
+      } in Some (n, loop 0 (g1 h1) (g2 h2)))
+    
+
+
+(* ***** List searching ***** *)
+
+
+let find ?(rev = false) p = function
+  | None -> raise Not_found
+  | Some (n, h) -> let f, g = Cell.choose rev in
+    let rec loop i t =
+      if i = n then raise Not_found else
+        let x = !(Cell.data t) in
+        if p x then x else loop (i + 1) (f t)
+    in loop 0 (g h)
+
+let find_all ?(rev = false) p = function
+  | None -> None
+  | Some (n, h) -> let f, g = Cell.choose (not rev) in
+    let rec loop acc i t =
+      if i = n then of_list acc else
+        let x = !(Cell.data t) in
+        loop (if p x then x :: acc else acc) (i + 1) (f t) 
+    in loop [] 0 (g h)
+
+let partition ?(rev = false) p = function
+  | None -> None, None
+  | Some (n, h) -> let f, g = Cell.choose (not rev) in
+    let rec loop yes no i t =
+      if i = n then (of_list yes, of_list no) else
+        let x = !(Cell.data t) in
+        (if p x then loop (x :: yes) no else loop yes (x :: no)) (i + 1) (f t)
+    in loop [] [] 0 (g h)
+
+
+
+(* ***** Iterators ***** *)
+
+let iter ?(rev = false) p = function
+  | None -> ()
+  | Some (n, h) -> let f, g = Cell.choose rev in
+    let rec loop i t =
+      if i < n then
+        let () = p !(Cell.data t) in
+        loop (i + 1) (f t)
+    in loop 0 (g h)
+
+let iteri ?(rev = false) p = function
+  | None -> ()
+  | Some (n, h) -> let f, g = Cell.choose rev in
+    let rec loop i t =
+      if i < n then
+        let () = p i !(Cell.data t) in
+        loop (i + 1) (f t)
+    in loop 0 (g h)
+
+let map ?(rev = false) f = function
+  | None -> None
+  | Some (n, h) -> 
+    let f1, f2, g = Cell.(if rev then next, prev, prev else prev, next, id) in
+    let rec loop i t () = {
+      data = (fun () -> f !(Cell.data t));
+      prev = loop (i <-- n) (f1 t);
+      next = loop (i --> n) (f2 t);
+    } in Some (n, loop 0 (g h))
+
+let mapi ?(rev = false) f = function
+  | None -> None
+  | Some (n, h) ->
+    let f1, f2, g = Cell.(if rev then next, prev, prev else prev, next, id) in
+    let rec loop i t () = {
+      data = (fun () -> f i !(Cell.data t));
+      prev = loop (i <-- n) (f1 t);
+      next = loop (i --> n) (f2 t);
+    } in Some (n, loop 0 (g h))
+
+let fold ?(rev = false) p e = function
+  | None -> e
+  | Some (n, h) -> let f, g = Cell.choose rev in
+    let rec loop i r t =
+      if i = n then r else
+        let r' = p r !(Cell.data t) in
+        loop (i + 1) r' (f t)
+    in loop 0 e (g h)
+
+let flatten t = fold append empty t
+
+let foldi ?(rev = false) p e = function
+  | None -> e
+  | Some (n, h) -> let f, g = Cell.choose rev in
+    let rec loop i r t =
+      if i = n then r else
+        let r' = p i r !(Cell.data t) in
+        loop (i + 1) r' (f t)
+    in loop 0 e (g h)
+
+let move f = function
+  | None -> ()
+  | Some (n, h) ->
+    let rec loop i {data; prev; next} =
+      let r = f i !data in
+      if r < 0 then loop (i <-- n) !prev else
+      if r > 0 then loop (i --> n) !next
+    in loop 0 !h
+
+
+
+(* ***** Iterators for two-argument functions ***** *)
+
+let iter2 ?(rev = false) p = function
+  | None -> (function None -> () | _ -> invalid_arg "Fcdll.iter2")
+  | Some (n1, h1) -> (function
+    | None -> invalid_arg "Fcdll.iter2"
+    | Some (n2, h2)-> let n = max n1 n2 in
+      let f1, f2, g1, g2 = Cell.choose2 rev in
+      let rec loop i t1 t2 =
+        if i < n then
+          let () = p !(Cell.data t1) !(Cell.data t2) in
+          loop (i + 1) (f1 t1) (f2 t2)
+      in loop 0 (g1 h1) (g2 h2))
+
+let map2 f = function
+  | None -> (function None -> None | _ -> invalid_arg "Fcdll.map2")
+  | Some (n1, h1) -> (function
+    | None -> invalid_arg "Fcdll.map2"
+    | Some (n2, h2) ->
+      let rec loop t1 t2 () = {
+        data = (fun () -> f !(Cell.data t1) !(Cell.data t2));
+        next = loop (Cell.next t1) (Cell.next t2);
+        prev = loop (Cell.prev t1) (Cell.prev t2);
+      } in Some (max n1 n2, loop h1 h2))
+  
+let fold2 ?(rev = false) p e = function
+  | None -> (function None -> e | _ -> invalid_arg "Fcdll.fold2")
+  | Some (n1, h1) -> (function
+    | None -> invalid_arg "Fcdll.fold2"
+    | Some (n2, h2) -> let n = max n1 n2 in
+      let f1, f2, g1, g2 = Cell.choose2 rev in
+      let rec loop i r t1 t2 =
+        if i = n then r else
+          let r' = p r !(Cell.data t1) !(Cell.data t2) in
+          loop (i + 1) r' (f1 t1) (f2 t2)
+      in loop 0 e (g1 h1) (g2 h2))
+  
 
 
 (* ***** Sorting ***** *)
