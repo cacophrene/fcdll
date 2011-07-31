@@ -4,37 +4,12 @@
  *  - doc: ocamldoc -html -colorize-code -stars -d html -t "Fcdll 1.0" fcdll.mli
  *)
 
-(* Bonjour,
-
-  J'ai déjà eu l'occasion de vous parler des listes doublement chaînées 
-  circulaires sur ce blog. À cette occasion, je vous ai présenté la façon la 
-  plus courante d'implémenter ces listes, à base de champs mutables et à
-  évaluation immédiate. Ce n'est cependant pas la seule manière de procéder.
-  C'est pourquoi je vous propose aujourd'hui de revenir sur ce problème pour 
-  explorer ensemble une version immutable et à évaluation retardée. 
-  Contrairement à la précédente, cette nouvelle implémentation donne des listes
-  dont la manipulation rappelle fortement le module [List] d'OCaml. *)
-
-(* Une liste doublement chaînée est une succession de cellules constituées de 
-  trois éléments : une valeur (data), un lien vers la cellule suivante (next) et
-  un lien vers la cellule précédente (prev). Cette liste devient circulaire dès
-  lors que le prédécesseur du premier élément est le dernier élément, et le 
-  successeur du dernier élément le premier élément.
-  
-  J'ai volontairement choisi d'implémenter l'évaluation retardée avec des 
-  fonctions pour montrer que le module Lazy n'est pas indispensable. Il faut
-  cependant noter que, contrairement au module Lazy qui permet de ne calculer 
-  qu'une seule fois chaque valeur, l'utilisation de fonctions se traduit par le 
-  calcul systématique des valeurs à chaque fois qu'elles sont nécessaires. *)
-
 type 'a cell = {
   data : unit -> 'a; 
   prev : unit -> 'a cell; 
   next : unit -> 'a cell;
 }
 
-(* La surcharge des opérateurs n'est pas considérée comme une bonne pratique de
-  programmation en OCaml, parce qu'elle est source d'erreurs. Dans *)
 let ( ! ) f = f ()
 external id : 'a -> 'a = "%identity"
 
@@ -50,36 +25,22 @@ module Cell =
   let rec prevN t = function 0 -> t | i -> prevN !t.prev (i - 1)
  end
 
-(* OCaml dispose d'un type 'a option dont les constructeurs sont précisément 
-  Some et None. Cette nouvelle définition, que l'on peut voir comme un cas 
-  particulier du type 'a option, est surtout motivée par la lisibilité du code
-  ainsi obtenu. *)
 type 'a fcdll = None | Some of int * (unit -> 'a cell)
 
-(* Deux fonctions auxiliaires pour le calcul des index. S'agissant de structures
-  cycliques, on pourrait aussi utiliser un modulo. *)
 let ( <-- ) i n = if i = 0 then n - 1 else i - 1
 let ( --> ) i n = if i = n - 1 then 0 else i + 1
 
-(* La liste vide et le test associé. *)
 let empty = None
 let is_empty t = t = None
 
-(* Longueur de la liste. Cette donnée est stockée car elle est utilisée par
-  presque toutes les fonctions de ce module. *)
 let length = function None -> 0 | Some (n, _) -> n
 
-(* La fonction make crée une liste composée de n éléments qui comportent tous la
-  même valeur x. Dans le cas présent, il suffit de définir une structure 
-  cyclique comme on le ferait dans la version impérative. *)
 let make n x =
   if n = 0 then None else
   if n < 0 then invalid_arg "Fcdll.make" else
   let rec next () = {data = Cell.from x; next; prev = next} in
   Some (n, next)
 
-(* La fonction init. Il s'agit d'une généralisation de make dans laquelle les 
-  éléments de la liste sont initialisés par application d'une fonction f. *)
 let init n f =
   if n = 0 then None else
   if n < 0 then invalid_arg "Fcdll.init" else
@@ -89,9 +50,6 @@ let init n f =
     next = loop (i --> n);
   } in Some (n, loop 0)
 
-(* Fonction rep destinée à répéter n fois le contenu de la liste. Cette fonction
- * est très utile pour utiliser les fonctions du type [map2] qui nécessitent des
- * listes de même taille. *)
 let rep k = function
   | None -> None
   | Some (n, h) -> Some (k * n, h)
@@ -108,33 +66,20 @@ let compare = function
             if r = 0 then loop (i + 1) (Cell.next t1) (Cell.next t2) else r
         in loop 0 h1 h2)
 
-(* La fonction succ décale la liste de sorte que le deuxième élément arrive en 
-  tête de liste. Le premier élément se trouve rejeté en dernière position. À
-  l'inverse, la fonction pred décale les éléments de la liste de sorte que le 
-  dernier élément arrive en première position. *)
 let move f = function None -> None | Some (n, h) -> Some (n, f h)  
 let succ t = move Cell.next t
 let pred t = move Cell.prev t
 
-(* La fonction head équivaut à List.hd. Elle renvoie la valeur stockée dans
-  la première cellule de la liste. *)
 let head = function
   | None -> invalid_arg "Fcdll.head"
   | Some (_, h) -> Cell.data h ()
   
-(* La fonction rotate permet de modifier l'élément qui occupe la tête de liste.
-  Les appels rotate 1 t et rotate (-1) t équivalent resp. aux fonctions succ et
-  pred. Cette fonction est déterminante pour blit, fill et sub ci-dessous. *)
 let rotate = function
   | 0 -> id
   | k -> (function
     | None -> None
     | Some (n, h) -> Some (n, Cell.(if k < 0 then prevN else nextN) h (abs k)))
 
-(* La fonction blit est inspirée de la fonction Array.blit. Elle permet de 
-  recopier toutes les valeurs d'une liste source dans une liste de destination
-  plus longue. Le premier élément de la liste de destination sert de point de
-  départ pour la copie. *)
 let blit = 
   let aux k = function
     | None -> id
@@ -150,10 +95,6 @@ let blit =
   in (fun ~src ~src_pos ~dst ~dst_pos ~len -> 
     rotate (-dst_pos) (aux len (rotate src_pos src) (rotate dst_pos dst)))
 
-(* La fonction Fcdll.fill est inspirée de la fonction Array.fill. Elle consiste à
-  remplacer les éléments d'index [pos; pos + len - 1] par une valeur x reçue en
-  entrée. Dans le cas présent, les valeurs négatives de pos sont acceptées et se
-  traduisent par un retour aux derniers éléments de la liste. *)
 let fill = 
   let aux = function
     | None -> make
@@ -166,7 +107,6 @@ let fill =
       } in Some (n, f 0 h))
   in (fun t ~pos ~len x -> rotate (-pos) (aux (rotate pos t) len x))
 
-(* La fonction Fcdll.sub extrait la sous-liste d'une  *)
 let sub = 
   let aux = function
     | None -> (fun _ -> invalid_arg "Fcdll.sub")
@@ -193,8 +133,6 @@ let tail = function
           (if i = n' then Cell.next y else y);
     } in Some (n', loop 1 (Cell.next h))
   
-(* La fonction set modifie la valeur stockée en tête de liste. Si la liste est
-  vide, la fonction se comporte comme make 1 et crée une liste à un élément. *)
 let set x = function
   | None -> make 1 x
   | Some (n, h) ->
@@ -213,13 +151,8 @@ let cons x = function
       next = if i = 0 then loop 1 t else loop (i --> m) (Cell.next t);
     } in Some (m, loop 0 h)
 
-(* Si on réutilise ce symbole obsolète en OCaml, on obtient un moyen pratique
-  d'ajouter un élément en tête de liste. À cette occasion, je rappelle que 
-  l'ajout en fin de liste s'obtient avec [succ (cons x t)]. *)
 let ( & ) = cons
 
-(* La fonction append reçoit deux listes en entrée et renvoie la liste 
-  constituée *)
 let append = function
   | None -> (fun c2 -> c2)
   | Some (n, h1) as c1 -> (function
@@ -233,9 +166,6 @@ let append = function
           (Cell.prev (if i = 0 then h2 else if i = n then h1 else t));
       } in Some (n', loop 0 h1))
 
-(* Inverse l'ordre des éléments de la liste. Cette fonction n'est pas très utile
-  dans le cas des listes doublement chaînées puisqu'il suffit de changer le sens
-  du parcours pour inverser l'ordre des éléments. *)
 let rev = function
   | None -> None
   | Some (n, h) ->
