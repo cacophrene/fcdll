@@ -1,0 +1,15 @@
+Functional circular doubly linked lists (Fcdll)
+-----
+
+To build the library from sources, you need at least OCaml 3.12. Then open a
+terminal and type :
+
+ - for bytecode : ocamlc fcdll.mli fcdll.ml -a -o fcdll.cma
+ - for native code : ocamlopt fcdll.mli fcdll.ml -a -o fcdll.cmxa
+
+You can also use ocamldoc to generate documentation using the following 
+command :
+
+ocamldoc -html -colorize-code -stars -d html-doc -t "Fcdll 1.0" fcdll.mli
+
+The documentation is also available at https://github.com/cacophrene/fcdll/wiki
