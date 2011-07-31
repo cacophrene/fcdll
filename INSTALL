@@ -1,0 +1,4 @@
+Fcdll installation instructions
+-----
+
+Just run make world && make install.
