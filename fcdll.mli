@@ -147,6 +147,13 @@ val insert : 'a -> pos:int -> 'a fcdll -> 'a fcdll
   * Negative values of [i] are allowed.
   * @raise Invalid_argument if [t] is empty. *)
 
+val intersperse : ?rev:bool -> 'a -> 'a fcdll -> 'a fcdll
+(** [Fcdll.intersperse x t] inserts [x] between the elements of list [t]. For
+  * example, [Fcdll.(to_list (intersperse 0 (of_list \[1;2;3\])))] returns the
+  * list [\[1; 0; 2; 0; 3; 0\]]. {b Note} : this function is derived from 
+  * Haskell [intersperse] function, but due to the circularity of fcdll, it 
+  * also adds [x] after the last element. *)
+
 val flatten : ?rev:bool -> 'a fcdll fcdll -> 'a fcdll
 (** [Fcdll.flatten t] concatenates the given list of lists [t]. The elements of 
   * the argument are all concatenated together in the same order to give the 

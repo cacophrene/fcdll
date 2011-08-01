@@ -20,6 +20,7 @@ module Cell =
   let next t = !t.next
   let data t = !t.data
   let choose rev = if rev then prev, prev else next, id
+  let choose_both rev = if rev then prev, next, prev else next, prev, id
   let choose2 rev = if rev then prev, prev, prev, prev else next, next, id, id
   let rec nextN t = function 0 -> t | i -> nextN !t.next (i - 1)
   let rec prevN t = function 0 -> t | i -> prevN !t.prev (i - 1)
@@ -171,6 +172,15 @@ let insert x ~pos = function
   | None -> invalid_arg "Fcdll.insert"
   | t -> rotate (-pos) (cons x (rotate (if pos < 0 then pos + 1 else pos) t))
 
+let intersperse ?(rev = false) x = function
+  | None -> None
+  | Some (n, h) -> let f_next, f_prev, f_init = Cell.choose_both rev in 
+    let rec loop i t ok () = {
+      data = Cell.(if ok then from x else data t);
+      prev = if ok then loop i t false else loop (i --> n) (f_prev t) true;
+      next = if ok then loop i t false else loop (i <-- n) (f_next t) true;
+    } in Some (n lsl 1, loop 0 (f_init h) false)
+ 
 let rev = function
   | None -> None
   | Some (n, h) ->
