@@ -331,6 +331,14 @@ let combine ?(rev = false) = function
 
 (* ***** List searching ***** *)
 
+let index ?(rev = false) ?(eq = (=)) x = function
+  | None -> raise Not_found
+  | Some (n, h) -> let f, g = Cell.choose rev in
+    let rec loop i t =
+      if i = n then raise Not_found else
+        let y = Cell.data t () in
+        if eq x y then i else loop (i + 1) (f t)
+    in loop 0 (g h)
 
 let find ?(rev = false) p = function
   | None -> raise Not_found

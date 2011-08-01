@@ -155,6 +155,11 @@ val flatten : ?rev:bool -> 'a fcdll fcdll -> 'a fcdll
   * sense of the traversal. Use [true] for reverse order. Default value is 
   * [false]. *)
 
+val index : ?rev:bool -> ?eq:('a -> 'a -> bool) -> 'a -> 'a fcdll -> int
+(** [Fcdll.index x t] returns the index of the first occurrence of the value [x
+  * in the list [t].
+  * @raise Not_found if [x] does not occur in [t]. *)
+
 val find : ?rev:bool -> ('a -> bool) -> 'a fcdll -> 'a
 (** [Fcdll.find p t] returns the first element of the list [t] that satisfies 
   * the predicate [p].
