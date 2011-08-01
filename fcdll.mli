@@ -131,17 +131,22 @@ val set : 'a -> 'a fcdll -> 'a fcdll
 (** {2 Consing and catenation} *)
 
 val cons : 'a -> 'a fcdll -> 'a fcdll
-(** [cons x t] adds [x] in first position to list [t]. To add [x] to the end of
-  * the list, just use [succ (cons x t)]. *)
+(** [Fcdll.cons x t] adds [x] in first position to list [t]. To add [x] to the 
+  * end of the list, just use [Fcdll.(succ (cons x t))]. *)
 
 val ( & ) : 'a -> 'a fcdll -> 'a fcdll
 (** Same as [cons] (see above). The symbol [(&)] is a deprecated synonym for
   * [(&&)] in OCaml. We decided to reuse it in [Fcdll]. *)
 
 val append : 'a fcdll -> 'a fcdll -> 'a fcdll
-(** [append t1 t2] returns a fresh list containing the concatenation of lists
-  * [t1] and [t2]. *)
-  
+(** [Fcdll.append t1 t2] returns a fresh list containing the concatenation of 
+  * lists [t1] and [t2]. *)
+
+val insert : 'a -> pos:int -> 'a fcdll -> 'a fcdll
+(** [Fcdll.insert x ~pos:i t] inserts the value [x] at index [i] in list [t].
+  * Negative values of [i] are allowed.
+  * @raise Invalid_argument if [t] is empty. *)
+
 val flatten : ?rev:bool -> 'a fcdll fcdll -> 'a fcdll
 (** [Fcdll.flatten t] concatenates the given list of lists [t]. The elements of 
   * the argument are all concatenated together in the same order to give the 

@@ -78,7 +78,8 @@ let rotate = function
   | 0 -> id
   | k -> (function
     | None -> None
-    | Some (n, h) -> Some (n, Cell.(if k < 0 then prevN else nextN) h (abs k)))
+    | Some (n, h) -> let rot = Cell.(if k < 0 then prevN else nextN) in
+      Some (n, rot h (abs k)))
 
 let blit = 
   let aux k = function
@@ -165,6 +166,10 @@ let append = function
         prev = loop (i <-- n')
           (Cell.prev (if i = 0 then h2 else if i = n then h1 else t));
       } in Some (n', loop 0 h1))
+
+let insert x ~pos = function
+  | None -> invalid_arg "Fcdll.insert"
+  | t -> rotate (-pos) (cons x (rotate (if pos < 0 then pos + 1 else pos) t))
 
 let rev = function
   | None -> None
