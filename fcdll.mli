@@ -151,14 +151,13 @@ val flatten : ?rev:bool -> 'a fcdll fcdll -> 'a fcdll
 
 
 (** {2 List searching}
-  * Searching functions have an optional [rev] argument which determine the 
-  * sense of the traversal. Use [true] for reverse order. Default value is 
-  * [false]. *)
+  * Searching functions have an optional [rev]. If set to [true], searching is
+  * performed in reverse order, from last to first element. *)
 
-val index : ?rev:bool -> ?eq:('a -> 'a -> bool) -> 'a -> 'a fcdll -> int
-(** [Fcdll.index x t] returns the index of the first occurrence of the value [x
-  * in the list [t].
-  * @raise Not_found if [x] does not occur in [t]. *)
+val index : ?rev:bool -> ('a -> bool) -> 'a fcdll -> int
+(** [Fcdll.index p t] returns the index of the first value that satisfies
+  * predicate [p] in list [t].
+  * @raise Not_found if there is no value that satisfies [p] in list [t]. *)
 
 val find : ?rev:bool -> ('a -> bool) -> 'a fcdll -> 'a
 (** [Fcdll.find p t] returns the first element of the list [t] that satisfies 
