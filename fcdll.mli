@@ -265,6 +265,16 @@ val foldi : ?rev:bool -> (int -> 'a -> 'b -> 'a) -> 'a -> 'b fcdll -> 'a
 (** Same as [fold], but [f] receives the index of the element as first argument. 
   * The head element has index [0]. *)
 
+val scan : ?rev:bool -> ('a -> 'b -> 'a) -> 'a -> 'b fcdll -> 'a fcdll
+(** [Fcdll.scan f e t] is similar to [Fcdll.fold], but returns the list of 
+  * successive reduced values. For example, [scan f e (of_list \[x1; x2; x3\])] 
+  * returns [\[e; f e x1; f (f e x1) x2; f (f (f e x1) x2) x3\]]. This function
+  * is inspired from Haskell function [scan].  {b Note} : this function runs
+  * fast on huge lists but be careful when trying to get values from the end of
+  * the returned list. The effective computation of these values require forcing 
+  * every intermediate reduced value, which can be quiet long. If you do need
+  * the last value, consider using [Fcdll.fold] instead. *)
+
 val move : (int -> 'a -> int) -> 'a fcdll -> unit
 (** [move f t] applies [f] to elements of [t]. The function [f] returns [1] to 
   * go to the next element, [-1] to return to the previous element, and [0] to

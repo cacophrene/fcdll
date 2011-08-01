@@ -63,7 +63,7 @@ let compare = function
       if r <> 0 then r else 
         let rec loop i t1 t2 =
           if i = n1 then 0 else
-            let r = compare !(Cell.data t1) !(Cell.data t2) in
+            let r = Pervasives.compare !(Cell.data t1) !(Cell.data t2) in
             if r = 0 then loop (i + 1) (Cell.next t1) (Cell.next t2) else r
         in loop 0 h1 h2)
 
@@ -442,6 +442,19 @@ let foldi ?(rev = false) p e = function
         let r' = p i r !(Cell.data t) in
         loop (i + 1) r' (f t)
     in loop 0 e (g h)
+
+let scan ?(rev = false) f e = function
+  | None -> make 1 e
+  | Some (n, h) -> let m = n + 1 in 
+    let f_next, f_prev, f_init = Cell.choose_both rev in
+    let rec loop i t = 
+      let rec me () = {
+        data = (fun () -> if i = 0 then e else 
+          Cell.(f !(data (prev me)) !(data t)));
+        next = loop (i --> m) (if i = 0 then t else f_next t);
+        prev = loop (i <-- m) (f_prev t);
+      } in me 
+     in Some (m, loop 0 (f_init h)) 
 
 let move f = function
   | None -> ()
