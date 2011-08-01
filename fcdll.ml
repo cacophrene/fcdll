@@ -50,7 +50,7 @@ let init n f =
     next = loop (i --> n);
   } in Some (n, loop 0)
 
-let rep k = function
+let repeat k = function
   | None -> None
   | Some (n, h) -> Some (k * n, h)
 

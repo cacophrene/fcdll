@@ -45,8 +45,8 @@ val init : int -> (int -> 'a) -> 'a fcdll
   * a list from the results of [f] applied to integers from [0] to [n - 1].
   * @raise Invalid_argument if [n < 0]. *)
 
-val rep : int -> 'a fcdll -> 'a fcdll
-(** [Fcdll.rep n t] repeats [n] times the elements of [t]. {b Important note} : 
+val repeat : int -> 'a fcdll -> 'a fcdll
+(** [Fcdll.repeat n t] repeats [n] times the elements of [t]. {b Note} : 
   * If [t] contains mutable elements, they will be shared by all occurrences in 
   * the list, and modifying them through one of the list entries will modify all 
   * other entries at the same time. *)
