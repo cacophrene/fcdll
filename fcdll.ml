@@ -55,6 +55,21 @@ let repeat k = function
   | None -> None
   | Some (n, h) -> Some (k * n, h)
 
+let iterate n f x =
+  if n = 0 then None else
+  if n < 0 then invalid_arg "Fcdll.iterate" else
+  let rec loop i = 
+    let rec me () =   {
+      data = (fun () -> if i = 0 then x else f !(Cell.data (Cell.prev me)));
+      next = loop (i --> n);
+      prev = loop (i <-- n);
+    } in me
+  in Some (n, loop 0) 
+
+
+
+(* ***** Common functions ***** *)
+
 let compare = function
   | None -> (function None -> 0 | _ -> -1)
   | Some (n1, h1) -> (function

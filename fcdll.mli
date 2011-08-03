@@ -51,6 +51,14 @@ val repeat : int -> 'a fcdll -> 'a fcdll
   * the list, and modifying them through one of the list entries will modify all 
   * other entries at the same time. *)
 
+val iterate : int -> ('a -> 'a) -> 'a -> 'a fcdll
+(** [Fcdll.iterate n f x] returns [\[x; f x; f (f x); ...; f (... (f x) ...)\]].
+  * @raise Invalid_argument if [n < 0]. 
+  * {b Note} : this function is as fast as any other function in this library, 
+  * even for huge lists. However, be careful when trying to access to the last
+  * element, because it requires forcing every intermediate computation, which 
+  * may be very long. *)
+
 
 
 (** {2 Common functions} *)
