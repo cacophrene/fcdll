@@ -145,9 +145,9 @@ let extract =
 let take ?(rev = false) k = function
   | None -> invalid_arg "Fcdll.take"
   | Some (n, _) as t -> if k < 0 then invalid_arg "Fcdll.take"
-    else if k = n then None else
+    else if k = n then t else
     extract t 
-      ~pos:(if rev then - 1 else 0) 
+      ~pos:(if rev then -1 else 0) 
       ~len:(if rev then -k else k)
 
 let drop ?(rev = false) k = function
@@ -174,6 +174,13 @@ let drop_while ?(rev = false) p = function
       extract c ~pos:(if rev then - k - 1 else k) 
         ~len:(if rev then k - n else n - k)
     in loop 0 0 (g h)
+
+let split_at = function
+  | 0 -> (fun x -> None, x)
+  | k when k < 0 -> (fun _ -> invalid_arg "Fcdll.split_at")
+  | k -> (function
+    | None -> invalid_arg "Fcdll.split_at"
+    | t -> take k t, drop k t)
 
 let tail = function
   | None -> invalid_arg "Fcdll.tail"
