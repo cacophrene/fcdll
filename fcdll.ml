@@ -90,6 +90,10 @@ let head = function
   | None -> invalid_arg "Fcdll.head"
   | Some (_, h) -> Cell.data h ()
   
+let last = function
+  | None -> invalid_arg "Fcdll.last"
+  | Some (_, h) -> Cell.data (Cell.prev h) ()
+  
 let rotate = function
   | 0 -> id
   | k -> (function

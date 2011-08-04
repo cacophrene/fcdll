@@ -81,6 +81,11 @@ val head : 'a fcdll -> 'a
 (** [Fcdll.head t] returns the value stored in the first element of the list [t].
   * @raise Invalid_argument if the list is empty. *)
 
+val last : 'a fcdll -> 'a
+(** [Fcdll.last t] returns the value which occupy the last position in the list 
+  * [t].
+  * @raise Invalid_argument if the list is empty. *)
+
 val tail : 'a fcdll -> 'a fcdll
 (** [Fcdll.tail t] returns the given list [t] without its first element. 
   * @raise Invalid_argument if the list is empty. *)
