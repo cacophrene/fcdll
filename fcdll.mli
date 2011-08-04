@@ -138,9 +138,30 @@ val insert : 'a -> pos:int -> 'a fcdll -> 'a fcdll
   * Negative values of [i] are allowed.
   * @raise Invalid_argument if [t] is empty. *)
 
-val sub : 'a fcdll -> pos:int -> len:int -> 'a fcdll
-(** [sub t n] returns a fresh list composed of the first [n] elements of list 
-  * [t]. @raise Invalid_argument if [n < 0] or [n > length t]. *)
+val extract : 'a fcdll -> pos:int -> len:int -> 'a fcdll
+(** [extract t ~pos:p ~len:k] returns a fresh list composed of the [k] elements
+  * of list [t] starting at index [p]. Negative values of [p] are allowed. When
+  * [k] is negative, elements are returned in reverse order. For example, the 
+  * expression [extract \[1; 2; 3] ~pos:(-1) ~len:(-3)\]] returns [\[3; 2; 1\]].
+  * If [k > length t], the resulting list will be longer, with recycled values.
+  * @raise Invalid_argument if the given list is empty. *)
+
+val take : int -> 'a fcdll -> 'a fcdll
+(** [Fcdll.take n t] returns the [n] first elements of list [t].
+  * @raise Invalid_argument if [t] is empty or [n > length t]. *)
+
+val drop : int -> 'a fcdll -> 'a fcdll
+(** [Fcdll.drop n t] returns the remaining suffix after [Fcdll.take n t].
+  * @raise Invalid_argument if [t] is empty or [n > length t]. *)
+
+val take_while : ?rev:bool -> ('a -> bool) -> 'a fcdll -> 'a fcdll
+(** [take_while f t] returns the longest prefix of [t] which elements satisfy
+  * predicate [f]. {b Note} : this function is directly inspired from Haskell
+  * [takeWhile]. *)
+
+val drop_while : ?rev:bool -> ('a -> bool) -> 'a fcdll -> 'a fcdll
+(** [drop_while f t] returns the suffix remaining after [take_while f t]. 
+  * {b Note} : this functions is directly inspired from Haskell [dropWhile]. *)
 
 val fill : 'a fcdll -> pos:int -> len:int -> 'a -> 'a fcdll
 (** [fill t ~pos ~len x] stores [x] in elements from [pos] to [pos + len - 1] in

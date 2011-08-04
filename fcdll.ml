@@ -128,18 +128,52 @@ let fill =
       } in Some (n, f 0 h))
   in (fun t ~pos ~len x -> rotate (-pos) (aux (rotate pos t) len x))
 
-let sub = 
+let extract = 
   let aux = function
     | None -> (fun _ -> invalid_arg "Fcdll.sub")
     | Some (n, h) -> (fun k -> 
-      if k < 0 || k = 0 then None else
-      if abs k > n then invalid_arg "Fcdll.sub" else
+      if k = 0 then None else
+      (*if abs k > n then invalid_arg "Fcdll.sub" else*)
+      let ff, gg, hh = Cell.(if k < 0 then prev, prevN, next else next, nextN, prev) in
       let rec f i t () = {
         data = Cell.data t;
-        next = f (i --> k) (if i = k' then h else Cell.next t);
-        prev = f (i <-- k) Cell.(if i = 0 then nextN h k' else prev t);
-      } and k' = k - 1 in Some (k, f 0 h))
+        next = f (i --> abs k) (if i = k' then h else ff t);
+        prev = f (i <-- abs k) Cell.(if i = 0 then gg h k' else hh t);
+      } and k' = abs k - 1 in Some (abs k, f 0 h))
   in (fun t ~pos ~len -> aux (rotate pos t) len)
+
+let take ?(rev = false) k = function
+  | None -> invalid_arg "Fcdll.take"
+  | Some (n, _) as t -> if k < 0 then invalid_arg "Fcdll.take"
+    else if k = n then None else
+    extract t 
+      ~pos:(if rev then - 1 else 0) 
+      ~len:(if rev then -k else k)
+
+let drop ?(rev = false) k = function
+  | None -> invalid_arg "Fcdll.drop"
+  | Some (n, _) as t -> if k < 0 then invalid_arg "Fcdll.drop"
+    else if k = n then None else
+    extract t 
+      ~pos:(if rev then - k - 1 else k) 
+      ~len:(if rev then k - n else n - k)
+
+let take_while ?(rev = false) p = function
+  | None -> None
+  | Some (n, h) as c -> let f, g = Cell.choose rev in
+    let rec loop i k t =
+      if i < n && p !(Cell.data t) then loop (i + 1) (k + 1) (f t)
+      else extract c ~pos:(if rev then -1 else 0) ~len:(if rev then -k else k)
+    in loop 0 0 (g h)
+
+let drop_while ?(rev = false) p = function
+  | None -> None
+  | Some (n, h) as c -> let f, g = Cell.choose rev in
+    let rec loop i k t =
+      if i < n && p !(Cell.data t) then loop (i + 1) (k + 1) (f t) else
+      extract c ~pos:(if rev then - k - 1 else k) 
+        ~len:(if rev then k - n else n - k)
+    in loop 0 0 (g h)
 
 let tail = function
   | None -> invalid_arg "Fcdll.tail"
@@ -522,7 +556,6 @@ let fold2 ?(rev = false) p e = function
           let r' = p r !(Cell.data t1) !(Cell.data t2) in
           loop (i + 1) r' (f1 t1) (f2 t2)
       in loop 0 e (g1 h1) (g2 h2))
-  
 
 
 (* ***** Sorting ***** *)
