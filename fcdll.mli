@@ -109,7 +109,7 @@ val succ : 'a fcdll -> 'a fcdll
 (** Rotates the given list so that the second element becomes the first one.
   * Does nothing if the list is empty. *)
   
- val rotate : int -> 'a fcdll -> 'a fcdll
+val rotate : int -> 'a fcdll -> 'a fcdll
 (** [rotate n t] rotates [n] times the list [t] using [succ] when [n > 0], 
   * [pred] otherwise. *)
 
@@ -147,12 +147,14 @@ val extract : 'a fcdll -> pos:int -> len:int -> 'a fcdll
   * @raise Invalid_argument if the given list is empty. *)
 
 val take : int -> 'a fcdll -> 'a fcdll
-(** [Fcdll.take n t] returns the [n] first elements of list [t].
-  * @raise Invalid_argument if [t] is empty or [n > length t]. *)
+(** [Fcdll.take k t] returns the [k] first elements of list [t]. If [k < 0], 
+  * elements are returned in reverse order. if [k > length t], the returned list
+  * contains recycled elements.
+  * @raise Invalid_argument if [t] is empty. *)
 
 val drop : int -> 'a fcdll -> 'a fcdll
-(** [Fcdll.drop n t] returns the remaining suffix after [Fcdll.take n t].
-  * @raise Invalid_argument if [t] is empty or [n > length t]. *)
+(** [Fcdll.drop k t] returns the remaining suffix after [Fcdll.take k t].
+  * @raise Invalid_argument if [t] is empty. *)
 
 val take_while : ?rev:bool -> ('a -> bool) -> 'a fcdll -> 'a fcdll
 (** [take_while f t] returns the longest prefix of [t] which elements satisfy
@@ -162,6 +164,11 @@ val take_while : ?rev:bool -> ('a -> bool) -> 'a fcdll -> 'a fcdll
 val drop_while : ?rev:bool -> ('a -> bool) -> 'a fcdll -> 'a fcdll
 (** [drop_while f t] returns the suffix remaining after [take_while f t]. 
   * {b Note} : this functions is directly inspired from Haskell [dropWhile]. *)
+
+val split_at : int -> 'a fcdll -> 'a fcdll * 'a fcdll
+(** [Fcdll.split_at k t] splits the given list [t] at position [k] and returns 
+  * the two sublists. Negative values of [k] are allowed.
+  * @raise Invalid_argument if [k <> 0 && is_empty t] is true. *)
 
 val fill : 'a fcdll -> pos:int -> len:int -> 'a -> 'a fcdll
 (** [fill t ~pos ~len x] stores [x] in elements from [pos] to [pos + len - 1] in
@@ -193,18 +200,13 @@ val intersperse : ?rev:bool -> 'a -> 'a fcdll -> 'a fcdll
 
 
 (** {2 List searching}
-  * Searching functions have an optional [rev]. If set to [true], searching is
-  * performed in reverse order, from last to first element. *)
+  * These functions have an optional [rev] argument. If set to [true], searching
+  * is performed in reverse order, from last to first element. *)
 
-val index : ?rev:bool -> ('a -> bool) -> 'a fcdll -> int
-(** [Fcdll.index p t] returns the index of the first value that satisfies
-  * predicate [p] in list [t].
-  * @raise Not_found if there is no value that satisfies [p] in list [t]. *)
-
-val find : ?rev:bool -> ('a -> bool) -> 'a fcdll -> 'a
-(** [Fcdll.find p t] returns the first element of the list [t] that satisfies 
-  * the predicate [p].
-  * @raise Not_found if there is no value that satisfies [p] in the list [t]. *)
+val find : ?rev:bool -> ('a -> bool) -> 'a fcdll -> 'a option
+(** [Fcdll.find p t] returns the first element of list [t] that satisfies the 
+  * predicate [p]. Returns [None] if there is no value that satisfies [p] in the
+  * list [t]. *)
 
 val find_all : ?rev:bool -> ('a -> bool) -> 'a fcdll -> 'a fcdll
 (** [Fcdll.find_all p t] returns all the elements of the list [t] that satisfy 
@@ -216,6 +218,13 @@ val partition : ?rev:bool -> ('a -> bool) -> 'a fcdll -> 'a fcdll * 'a fcdll
   * list of all the elements of [t] that satisfy the predicate [p], and [t2] is 
   * the list of all the elements of [t] that do not satisfy [p]. The order of 
   * the elements in the input list is preserved. *)
+
+val index : ?rev:bool -> ('a -> bool) -> 'a fcdll -> int
+(** [Fcdll.index p t] returns the index of the first value that satisfies
+  * predicate [p] in list [t].
+  * @raise Not_found if there is no value that satisfies [p] in list [t]. *)
+
+val indexes : ?rev:bool -> ('a -> bool) -> 'a fcdll -> int fcdll
 
 
 
