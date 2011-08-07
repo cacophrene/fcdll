@@ -107,7 +107,6 @@ let rotate = function
     | Circ (n, h) -> let rotf = Cell.(if k < 0 then n_prev else n_next) in
       Circ (n, rotf h (abs k)))
 
-
 let blit = 
   let aux k = function
     | Null -> id

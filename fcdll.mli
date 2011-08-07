@@ -138,6 +138,10 @@ val insert : 'a -> pos:int -> 'a fcdll -> 'a fcdll
   * Negative values of [i] are allowed.
   * @raise Invalid_argument if [t] is empty. *)
 
+
+
+(** {2 Sublist extraction} *)
+
 val extract : 'a fcdll -> pos:int -> len:int -> 'a fcdll
 (** [extract t ~pos:p ~len:k] returns a fresh list composed of the [k] elements
   * of list [t] starting at index [p]. Negative values of [p] are allowed. When
@@ -157,18 +161,19 @@ val drop : int -> 'a fcdll -> 'a fcdll
   * @raise Invalid_argument if [t] is empty. *)
 
 val take_while : ?rev:bool -> ('a -> bool) -> 'a fcdll -> 'a fcdll
-(** [take_while f t] returns the longest prefix of [t] which elements satisfy
-  * predicate [f]. {b Note} : this function is directly inspired from Haskell
-  * [takeWhile]. *)
+(** [Fcdll.take_while f t] returns the longest prefix of [t] which elements
+  * satisfy predicate [f]. *)
 
 val drop_while : ?rev:bool -> ('a -> bool) -> 'a fcdll -> 'a fcdll
-(** [drop_while f t] returns the suffix remaining after [take_while f t]. 
-  * {b Note} : this functions is directly inspired from Haskell [dropWhile]. *)
+(** [Fcdll.drop_while f t] returns the suffix remaining after 
+  * [Fcdll.take_while f t]. *)
 
 val split_at : int -> 'a fcdll -> 'a fcdll * 'a fcdll
 (** [Fcdll.split_at k t] splits the given list [t] at position [k] and returns 
-  * the two sublists. Negative values of [k] are allowed.
-  * @raise Invalid_argument if [k <> 0 && is_empty t] is true. *)
+  * the two sublists. Negative values of [k] are allowed and result in reversed
+  * sublists. If [abs k > length t], the first sublist contains recycled values 
+  * and the second is empty.
+  * @raise Invalid_argument when [k <> 0 && is_empty t] is true. *)
 
 val fill : 'a fcdll -> pos:int -> len:int -> 'a -> 'a fcdll
 (** [fill t ~pos ~len x] stores [x] in elements from [pos] to [pos + len - 1] in
