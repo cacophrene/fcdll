@@ -138,6 +138,33 @@ val insert : 'a -> pos:int -> 'a fcdll -> 'a fcdll
   * Negative values of [i] are allowed.
   * @raise Invalid_argument if [t] is empty. *)
 
+val fill : 'a fcdll -> pos:int -> len:int -> 'a -> 'a fcdll
+(** [fill t ~pos ~len x] stores [x] in elements from [pos] to [pos + len - 1] in
+  * list [t]. Negative values for parameter [pos] are allowed.
+  * @raise Invalid_argument if [len < 0] or [len > length t]. *)
+
+val blit : 
+  src:'a fcdll -> 
+  src_pos:int -> dst:'a fcdll -> dst_pos:int -> len:int -> 'a fcdll
+(** [blit ~src ~src_pos ~dst ~dst_pos len] stores [len] elements of list [src]
+  * starting at [src_pos] in list [dst] starting at [dst_pos]. Both [src_pos]
+  * and [dst_pos] can be negative and [len] can be greater than [length src] (in
+  * this case, the function simply cycle to the beginning).
+  * @raise Invalid_argument if [length src > length dst]. *)
+
+val flatten : ?rev:bool -> 'a fcdll fcdll -> 'a fcdll
+(** [Fcdll.flatten t] concatenates the given list of lists [t]. The elements of 
+  * the argument are all concatenated together in the same order to give the 
+  * result. {b Note} : this function is equivalent to 
+  * [Fcdll.(fold append empty)]. *)
+
+val intersperse : ?rev:bool -> 'a -> 'a fcdll -> 'a fcdll
+(** [Fcdll.intersperse x t] inserts [x] between the elements of list [t]. For
+  * example, [Fcdll.(to_list (intersperse 0 (of_list \[1;2;3\])))] returns the
+  * list [\[1; 0; 2; 0; 3; 0\]]. {b Note} : this function is derived from 
+  * Haskell [intersperse] function, but due to the circularity of fcdll, it 
+  * also adds [x] after the last element. *)
+
 
 
 (** {2 Sublist extraction} *)
@@ -174,33 +201,6 @@ val split_at : int -> 'a fcdll -> 'a fcdll * 'a fcdll
   * sublists. If [abs k > length t], the first sublist contains recycled values 
   * and the second is empty.
   * @raise Invalid_argument when [k <> 0 && is_empty t] is true. *)
-
-val fill : 'a fcdll -> pos:int -> len:int -> 'a -> 'a fcdll
-(** [fill t ~pos ~len x] stores [x] in elements from [pos] to [pos + len - 1] in
-  * list [t]. Negative values for parameter [pos] are allowed.
-  * @raise Invalid_argument if [len < 0] or [len > length t]. *)
-
-val blit : 
-  src:'a fcdll -> 
-  src_pos:int -> dst:'a fcdll -> dst_pos:int -> len:int -> 'a fcdll
-(** [blit ~src ~src_pos ~dst ~dst_pos len] stores [len] elements of list [src]
-  * starting at [src_pos] in list [dst] starting at [dst_pos]. Both [src_pos]
-  * and [dst_pos] can be negative and [len] can be greater than [length src] (in
-  * this case, the function simply cycle to the beginning).
-  * @raise Invalid_argument if [length src > length dst]. *)
-
-val flatten : ?rev:bool -> 'a fcdll fcdll -> 'a fcdll
-(** [Fcdll.flatten t] concatenates the given list of lists [t]. The elements of 
-  * the argument are all concatenated together in the same order to give the 
-  * result. {b Note} : this function is equivalent to 
-  * [Fcdll.(fold append empty)]. *)
-
-val intersperse : ?rev:bool -> 'a -> 'a fcdll -> 'a fcdll
-(** [Fcdll.intersperse x t] inserts [x] between the elements of list [t]. For
-  * example, [Fcdll.(to_list (intersperse 0 (of_list \[1;2;3\])))] returns the
-  * list [\[1; 0; 2; 0; 3; 0\]]. {b Note} : this function is derived from 
-  * Haskell [intersperse] function, but due to the circularity of fcdll, it 
-  * also adds [x] after the last element. *)
 
 
 
