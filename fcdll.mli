@@ -6,9 +6,9 @@
 
 (** The module [Fcdll] implements circular doubly linked lists in OCaml. Unlike
   * many other modules available on the web, this implementation use 
-  * {i functional} (immutable) lists with {i deferred computation} (laziness). 
-  * The use of deferred computation has three main consequences you should 
-  * consider when using these lists in your applications :
+  * {i functional} (immutable) lists with some kind of {i deferred computation} 
+  * (laziness). This has three main consequences you should consider when using 
+  * these lists in your applications :
   *   - Values are {i not} computed once and for all.
   *   - As a consequence, side effects should be avoided.
   *   - Huge lists (up to [max_int] elements) are easy to create. 
@@ -42,8 +42,8 @@ val make : int -> 'a -> 'a fcdll
 val init : int -> (int -> 'a) -> 'a fcdll
 (** [Fcdll.init n f] returns a fresh list of length [n], with element number [i]
   * initialized to the result of [f i]. In other terms, [Fcdll.init n f] builds
-  * a list from the results of [f] applied to integers from [0] to [n - 1].
-  * @raise Invalid_argument if [n < 0]. *)
+  * a list from the results of [f] applied to integers from [0] to [n - 1]. If
+  * [n] is negative, the result is equal to [Fcdll.(rev (init (-n) f))]. *)
 
 val repeat : int -> 'a fcdll -> 'a fcdll
 (** [Fcdll.repeat n t] repeats [n] times the elements of [t]. {b Note} : 
@@ -159,23 +159,30 @@ val flatten : ?rev:bool -> 'a fcdll fcdll -> 'a fcdll
   * [Fcdll.(fold append empty)]. *)
 
 val intersperse : ?rev:bool -> 'a -> 'a fcdll -> 'a fcdll
-(** [Fcdll.intersperse x t] inserts [x] between the elements of list [t]. For
-  * example, [Fcdll.(to_list (intersperse 0 (of_list \[1;2;3\])))] returns the
+(** [Fcdll.intersperse x t] inserts [x] between each element of list [t]. Please
+  * note that since [t] is circular, and additional occurrence of [x] is added 
+  * between the last and the first elements. For example, 
+  * [Fcdll.(to_list (intersperse 0 (of_list \[1; 2; 3\])))] returns the
   * list [\[1; 0; 2; 0; 3; 0\]]. {b Note} : this function is derived from 
-  * Haskell [intersperse] function, but due to the circularity of fcdll, it 
-  * also adds [x] after the last element. *)
+  * Haskell [intersperse] function. *)
 
 
 
 (** {2 Sublist extraction} *)
 
 val extract : 'a fcdll -> pos:int -> len:int -> 'a fcdll
-(** [extract t ~pos:p ~len:k] returns a fresh list composed of the [k] elements
+(** [Fcdll.extract t ~pos:p ~len:k] returns a fresh list composed of the [k] elements
   * of list [t] starting at index [p]. Negative values of [p] are allowed. When
   * [k] is negative, elements are returned in reverse order. For example, the 
-  * expression [extract \[1; 2; 3] ~pos:(-1) ~len:(-3)\]] returns [\[3; 2; 1\]].
+  * expression [extract \[1; 2; 3\] ~pos:(-1) ~len:(-3)] returns [\[3; 2; 1\]].
   * If [k > length t], the resulting list will be longer, with recycled values.
   * @raise Invalid_argument if the given list is empty. *)
+
+val subseq : ?rev:bool -> 'a fcdll -> 'a fcdll fcdll
+(** [Fcdll.subseq t] returns the list of all sublists of [t] in increasing 
+  * order. For example, [subseq \[1; 2\]] returns [\[\[\]; \[1\]; \[1; 2\]\]].
+  * If [rev] is set to [true], sublist extraction is performed in reverse order,
+  * as in [subseq (rev t)]. *)
 
 val take : int -> 'a fcdll -> 'a fcdll
 (** [Fcdll.take k t] returns the [k] first elements of list [t]. If [k < 0], 
@@ -201,6 +208,12 @@ val split_at : int -> 'a fcdll -> 'a fcdll * 'a fcdll
   * sublists. If [abs k > length t], the first sublist contains recycled values 
   * and the second is empty.
   * @raise Invalid_argument when [k <> 0 && is_empty t] is true. *)
+
+val span : ?rev:bool -> ('a -> bool) -> 'a fcdll * 'a fcdll
+(** [Fcdll.span p t] returns a couple of lists composed of the longest prefix of
+  * [t] of elements which satisfy [p], and the remaining elements. This function
+  * is equivalent to [Fcdll.(take_while p t, drop_while p t)]. 
+  * @raise Invalid_argument if [t] is empty. *)
 
 
 

@@ -18,23 +18,21 @@ module Cell =
   let next t = (t ()).next
   let data t = (t ()).data
   let contents t = data t ()
-  let choose = function
-    | true -> prev, prev
-    | false -> id, next
-  let rec n_next t = function 
-    | 0 -> t 
-    | i -> n_next (next t) (i - 1)
-  let rec n_prev t = function
-    | 0 -> t 
-    | i -> n_prev (prev t) (i - 1)
+  let choose = function true -> prev, prev | _ -> id, next
+  let n_move t k =
+    let f = if k < 0 then prev else next in
+    let rec loop t = function
+      | 0 -> t
+      | i -> loop (f t) (i - 1)
+    in loop t (abs k)
   let choose_both rev = if rev then prev, next, prev else next, prev, id
   let choose2 rev = if rev then prev, prev, prev, prev else next, next, id, id
  end
 
 type 'a fcdll = Null | Circ of (int * (unit -> 'a cell))
 
-let ( <-- ) i n = if i = 0 then n - 1 else i - 1
-let ( --> ) i n = if i = n - 1 then 0 else i + 1
+let ( <<- ) i n = if i = 0 then n - 1 else i - 1
+let ( ->> ) i n = if i = n - 1 then 0 else i + 1
 
 let empty = Null
 let is_empty t = t = Null
@@ -49,12 +47,13 @@ let make n x =
 
 let init n f =
   if n = 0 then Null else
-  if n < 0 then invalid_arg "Fcdll.init" else
+  let e, a, b = if n < 0 then -n - 1, (->>), (<<-) else 0, (<<-), (->>) in
+  let n = abs n in
   let rec loop i () = {
     data = (fun () -> f i);
-    prev = loop (i <-- n);
-    next = loop (i --> n);
-  } in Circ (n, loop 0)
+    prev = loop (a i n);
+    next = loop (b i n);
+  } in Circ (n, loop e)
 
 let repeat k = function
   | Null -> Null
@@ -66,8 +65,8 @@ let iterate n f x =
   let rec loop i = 
     let rec me () =   {
       data = (fun () -> if i = 0 then x else f Cell.(contents (prev me)));
-      next = loop (i --> n);
-      prev = loop (i <-- n);
+      next = loop (i ->> n);
+      prev = loop (i <<- n);
     } in me
   in Circ (n, loop 0)
 
@@ -83,14 +82,9 @@ let compare = function
       if r <> 0 then r else 
         let rec loop i t1 t2 = Cell.(
           if i = n1 then 0 else
-            let r = Pervasives.compare (contents t1) !(contents t2) in
+            let r = Pervasives.compare (contents t1) (contents t2) in
             if r = 0 then loop (i + 1) (next t1) (next t2) else r
         ) in loop 0 h1 h2)
-
-
-let move f = function Null -> Null | Circ (n, h) -> Circ (n, f h)  
-let succ t = move Cell.next t
-let pred t = move Cell.prev t
 
 let head = function
   | Null -> invalid_arg "Fcdll.head"
@@ -99,13 +93,93 @@ let head = function
 let last = function
   | Null -> invalid_arg "Fcdll.last"
   | Circ (_, h) -> Cell.contents (Cell.prev h)
-  
+
+let tail = function
+  | Null -> invalid_arg "Fcdll.tail"
+  | Circ (1, _) -> Null
+  | Circ (n, h) -> let n' = n - 1 in
+    let rec loop i t () =
+      let x = Cell.prev t and y = Cell.next t in
+      {(t ()) with
+        prev = loop ((if i = 1 then n else i) - 1) 
+          (if i = 1 then Cell.prev x else x);
+        next = loop (if i = n' then 1 else i + 1)
+          (if i = n' then Cell.next y else y);
+    } in Circ (n', loop 1 (Cell.next h))
+
+let rev = function
+  | Null -> Null
+  | Circ (n, h) -> Cell.(
+    let rec loop t () =
+      {(t ()) with prev = loop (next t); next = loop (prev t)}
+    in Circ (n, loop (prev h)))
+
+
+
+(* ----- Rotate ----- *)
+
+let move f = function Null -> Null | Circ (n, h) -> Circ (n, f h)  
+let succ t = move Cell.next t
+let pred t = move Cell.prev t
+
 let rotate = function
   | 0 -> id
   | k -> (function
     | Null -> Null
-    | Circ (n, h) -> let rotf = Cell.(if k < 0 then n_prev else n_next) in
-      Circ (n, rotf h (abs k)))
+    | Circ (n, h) -> Circ (n, Cell.n_move h k))
+
+
+
+(* ----- List edition ----- *)
+
+let set x = function
+  | Null -> make 1 x
+  | Circ (n, h) ->
+    let rec loop i t () = {
+      data = if i = 0 then (fun () -> x) else Cell.data t; 
+      prev = loop (i <<- n) (Cell.prev t);
+      next = loop (i ->> n) (Cell.next t);
+    } in Circ (n, loop 0 h)
+
+let cons x = function
+  | Null -> make 1 x
+  | Circ (n, h) -> let m = n + 1 in
+    let rec loop i t () = {
+      data = if i = 0 then (fun () -> x) else Cell.data t;
+      prev = loop (if i = 0 then n else i <<- m) (Cell.prev t);
+      next = if i = 0 then loop 1 t else loop (i ->> m) (Cell.next t);
+    } in Circ (m, loop 0 h)
+
+let ( & ) = cons
+
+let append = function
+  | Null -> (fun c2 -> c2)
+  | Circ (n, h1) as c1 -> (function
+    | Null -> c1
+    | Circ (m, h2) -> let n' = n + m in
+      let rec loop i t () = {
+        data = Cell.data t;
+        next = loop (i ->> n')
+          (if i = n - 1 then h2 else if i = n' - 1 then h1 else Cell.next t);
+        prev = loop (i <<- n')
+          (Cell.prev (if i = 0 then h2 else if i = n then h1 else t));
+      } in Circ (n', loop 0 h1))
+
+let insert x ~pos = function
+  | Null -> invalid_arg "Fcdll.insert"
+  | t -> rotate (-pos) (cons x (rotate (if pos < 0 then pos + 1 else pos) t))
+
+let fill = 
+  let aux = function
+    | Null -> make
+    | Circ (n, h) -> (fun m x ->
+      if m < 0 || m > n then invalid_arg "Fcdll.fill" else
+      let rec f i t () = {
+        data = if i < m then (fun () -> x) else Cell.data t;
+        prev = f (i <<- n) (Cell.prev t);
+        next = f (i ->> n) (Cell.next t);
+      } in Circ (n, f 0 h))
+  in (fun t ~pos ~len x -> rotate (-pos) (aux (rotate pos t) len x))
 
 let blit = 
   let aux k = function
@@ -115,24 +189,24 @@ let blit =
       | Circ (n, x) when n >= m ->
         let rec f i x y () = {
           data = Cell.data (if i < k then y else x);
-          next = f (i --> n) (Cell.next x) (if i < k then Cell.next y else w);
-          prev = f (i <-- n) (Cell.prev x) (if i < k then Cell.prev y else w);
+          next = f (i ->> n) (Cell.next x) (if i < k then Cell.next y else w);
+          prev = f (i <<- n) (Cell.prev x) (if i < k then Cell.prev y else w);
         } in Circ (n, f 0 x w)
       | _ -> invalid_arg "Fcdll.blit")
   in (fun ~src ~src_pos ~dst ~dst_pos ~len -> 
     rotate (-dst_pos) (aux len (rotate src_pos src) (rotate dst_pos dst)))
 
-let fill = 
-  let aux = function
-    | Null -> make
-    | Circ (n, h) -> (fun m x ->
-      if m < 0 || m > n then invalid_arg "Fcdll.fill" else
-      let rec f i t () = {
-        data = if i < m then (fun () -> x) else Cell.data t;
-        prev = f (i <-- n) (Cell.prev t);
-        next = f (i --> n) (Cell.next t);
-      } in Circ (n, f 0 h))
-  in (fun t ~pos ~len x -> rotate (-pos) (aux (rotate pos t) len x))
+let intersperse ?(rev = false) x = function
+  | Null -> Null
+  | Circ (n, h) -> let f_next, f_prev, f_init = Cell.choose_both rev in 
+    let rec loop i t ok () = {
+      data = if ok then (fun () -> x) else Cell.data t;
+      prev = if ok then loop i t false else loop (i ->> n) (f_prev t) true;
+      next = if ok then loop i t false else loop (i <<- n) (f_next t) true;
+    } in Circ (n lsl 1, loop 0 (f_init h) false)
+ 
+
+(* ----- Sublist extraction ----- *)
 
 let extract = 
   let aux = function
@@ -140,17 +214,33 @@ let extract =
     | Circ (n, h) -> (fun k -> 
       if k = 0 then Null else
       (*if abs k > n then invalid_arg "Fcdll.sub" else*)
-      let ff, gg, hh = Cell.(if k < 0 then prev, n_prev, next else next, n_next, prev) in
+      let ff, hh = Cell.(if k < 0 then prev, next else next, prev) in
       let rec f i t () = {
         data = Cell.data t;
-        next = f (i --> abs k) (if i = k' then h else ff t);
-        prev = f (i <-- abs k) Cell.(if i = 0 then gg h k' else hh t);
+        next = f (i ->> abs k) (if i = k' then h else ff t);
+        prev = f (i <<- abs k) Cell.(if i = 0 then n_move h k' else hh t);
       } and k' = abs k - 1 in Circ (abs k, f 0 h))
   in (fun t ~pos ~len -> aux (rotate pos t) len)
+
+let subseq ?(rev = false) = function
+  | Null -> Null
+  | Circ (n, h) as t -> let pos = if rev then -1 else 0 and n' = n + 1 in
+    let rec loop i () = {
+      data = (fun () -> extract t ~pos ~len:(if rev then -i else i));
+      next = loop (i ->> n');
+      prev = loop (i <<- n');
+    } in Circ (n', loop 0)
 
 let take len = function
   | Null -> invalid_arg "Fcdll.take"
   | t -> extract t ~pos:(if len < 0 then -1 else 0) ~len
+
+let drop k = function
+  | Null -> invalid_arg "Fcdll.drop"
+  | Circ (n, _) as t -> if abs k >= n then Null else
+    extract t 
+      ~pos:(if k < 0 then k - 1 else k)
+      ~len:(if k < 0 then - n - k else n - k)
 
 let take_while ?(rev = false) p = function
   | Null -> Null
@@ -159,13 +249,6 @@ let take_while ?(rev = false) p = function
       if i < n && p (Cell.contents t) then loop (i + 1) (k + 1) (f t)
       else extract c ~pos:(if rev then -1 else 0) ~len:(if rev then -k else k)
     in loop 0 0 (g h)
-
-let drop k = function
-  | Null -> invalid_arg "Fcdll.drop"
-  | Circ (n, _) as t -> if abs k >= n then Null else
-    extract t 
-      ~pos:(if k < 0 then k - 1 else k)
-      ~len:(if k < 0 then - n - k else n - k)
 
 let drop_while ?(rev = false) p = function
   | Null -> Null
@@ -182,72 +265,16 @@ let split_at = function
     | Null -> invalid_arg "Fcdll.split_at"
     | t -> take k t, drop k t)
 
-let tail = function
-  | Null -> invalid_arg "Fcdll.tail"
-  | Circ (1, _) -> Null
-  | Circ (n, h) -> let n' = n - 1 in
-    let rec loop i t () =
-      let x = Cell.prev t and y = Cell.next t in
-      {(t ()) with
-        prev = loop ((if i = 1 then n else i) - 1) 
-          (if i = 1 then Cell.prev x else x);
-        next = loop (if i = n' then 1 else i + 1)
-          (if i = n' then Cell.next y else y);
-    } in Circ (n', loop 1 (Cell.next h))
-  
-let set x = function
-  | Null -> make 1 x
-  | Circ (n, h) ->
-    let rec loop i t () = {
-      data = if i = 0 then (fun () -> x) else Cell.data t; 
-      prev = loop (i <-- n) (Cell.prev t);
-      next = loop (i --> n) (Cell.next t);
-    } in Circ (n, loop 0 h)
 
-let cons x = function
-  | Null -> make 1 x
-  | Circ (n, h) -> let m = n + 1 in
-    let rec loop i t () = {
-      data = if i = 0 then (fun () -> x) else Cell.data t;
-      prev = loop (if i = 0 then n else i <-- m) (Cell.prev t);
-      next = if i = 0 then loop 1 t else loop (i --> m) (Cell.next t);
-    } in Circ (m, loop 0 h)
 
-let ( & ) = cons
-
-let append = function
-  | Null -> (fun c2 -> c2)
-  | Circ (n, h1) as c1 -> (function
-    | Null -> c1
-    | Circ (m, h2) -> let n' = n + m in
-      let rec loop i t () = {
-        data = Cell.data t;
-        next = loop (i --> n')
-          (if i = n - 1 then h2 else if i = n' - 1 then h1 else Cell.next t);
-        prev = loop (i <-- n')
-          (Cell.prev (if i = 0 then h2 else if i = n then h1 else t));
-      } in Circ (n', loop 0 h1))
-
-let insert x ~pos = function
-  | Null -> invalid_arg "Fcdll.insert"
-  | t -> rotate (-pos) (cons x (rotate (if pos < 0 then pos + 1 else pos) t))
-
-let intersperse ?(rev = false) x = function
-  | Null -> Null
-  | Circ (n, h) -> let f_next, f_prev, f_init = Cell.choose_both rev in 
-    let rec loop i t ok () = {
-      data = if ok then (fun () -> x) else Cell.data t;
-      prev = if ok then loop i t false else loop (i --> n) (f_prev t) true;
-      next = if ok then loop i t false else loop (i <-- n) (f_next t) true;
-    } in Circ (n lsl 1, loop 0 (f_init h) false)
- 
-let rev = function
-  | Null -> Null
-  | Circ (n, h) -> Cell.(
-    let rec loop t () =
-      {(t ()) with prev = loop (next t); next = loop (prev t)}
-    in Circ (n, loop (prev h)))
-
+let span ?(rev = false) p = function
+  | Null -> invalid_arg "Fcdll.span"
+  | Circ (n, h) as c -> let init, next = Cell.choose rev in
+    let rec loop i t =
+      if i = n then (c, Null) else
+      if p (Cell.contents t) then loop (i + 1) (next t) else
+        let i' = if rev then -i else i in (take i' c, drop i' c)
+    in loop 0 (init h)
 
 
 (* ----- Conversion ----- *)
@@ -284,8 +311,8 @@ module OfArrayImpl =
     if n > 0 then (
       let rec loop i () = {
         data = (fun () -> Array.unsafe_get t i);
-        next = loop (i --> n);
-        prev = loop (i <-- n);
+        next = loop (i ->> n);
+        prev = loop (i <<- n);
       } in Circ (n, loop 0)
     ) else Null
   let reverse t =
@@ -293,8 +320,8 @@ module OfArrayImpl =
     if n > 0 then (
       let rec loop i () = {
         data = (fun () -> Array.unsafe_get t i);
-        next = loop (i <-- n);
-        prev = loop (i --> n);
+        next = loop (i <<- n);
+        prev = loop (i ->> n);
       } in Circ (n, loop (n - 1))
     ) else Null
  end
@@ -428,12 +455,12 @@ let split ?(rev = false) = function
     let rec loop i t =
         (fun () ->
         { data = (fun () -> fst (Cell.contents t)); 
-          next = fst (loop (i --> n) (f1 t));
-          prev = fst (loop (i <-- n) (f2 t));
+          next = fst (loop (i ->> n) (f1 t));
+          prev = fst (loop (i <<- n) (f2 t));
         }), (fun () -> { 
           data = (fun () -> snd (Cell.contents t));
-          next = snd (loop (i --> n) (f1 t));
-          prev = snd (loop (i <-- n) (f2 t));
+          next = snd (loop (i ->> n) (f1 t));
+          prev = snd (loop (i <<- n) (f2 t));
      }) in let a, b = loop 0 (g h) in Circ (n, a), Some (n, b)
 
 let combine ?(rev = false) = function
@@ -445,8 +472,8 @@ let combine ?(rev = false) = function
       let f3, f4, _, _ = Cell.choose2 (not rev) in
       let rec loop i t1 t2 () = {
         data = (fun () -> Cell.(contents t1, contents t2));
-        next = loop (i --> n) (f1 t1) (f2 t2);
-        prev = loop (i <-- n) (f3 t1) (f4 t2);
+        next = loop (i ->> n) (f1 t1) (f2 t2);
+        prev = loop (i <<- n) (f3 t1) (f4 t2);
       } in Circ (n, loop 0 (g1 h1) (g2 h2)))
    
     
@@ -477,8 +504,8 @@ let map ?(rev = false) f = function
     let f1, f2, g = Cell.(if rev then next, prev, prev else prev, next, id) in
     let rec loop i t () = {
       data = (fun () -> f (Cell.contents t));
-      prev = loop (i <-- n) (f1 t);
-      next = loop (i --> n) (f2 t);
+      prev = loop (i <<- n) (f1 t);
+      next = loop (i ->> n) (f2 t);
     } in Circ (n, loop 0 (g h))
 
 let mapi ?(rev = false) f = function
@@ -487,8 +514,8 @@ let mapi ?(rev = false) f = function
     let f1, f2, g = Cell.(if rev then next, prev, prev else prev, next, id) in
     let rec loop i t () = {
       data = (fun () -> f i (Cell.contents t));
-      prev = loop (i <-- n) (f1 t);
-      next = loop (i --> n) (f2 t);
+      prev = loop (i <<- n) (f1 t);
+      next = loop (i ->> n) (f2 t);
     } in Circ (n, loop 0 (g h))
 
 let fold ?(rev = false) f e = function
@@ -517,19 +544,19 @@ let scan ?(rev = false) f e = function
       let rec me () = {
         data = (fun () -> if i = 0 then e else 
           Cell.(f (contents (prev me)) (contents t)));
-        next = loop (i --> m) (if i = 0 then t else f_next t);
-        prev = loop (i <-- m) (f_prev t);
+        next = loop (i ->> m) (if i = 0 then t else f_next t);
+        prev = loop (i <<- m) (f_prev t);
       } in me 
      in Circ (m, loop 0 (f_init h)) 
 
 let move f = function
   | Null -> ()
   | Circ (n, h) ->
-    let rec loop t i =
-      let r = f i (Cell.contents t) in
-      if r < 0 then loop (Cell.prev t) (i <-- n) else
-      if r > 0 then loop (Cell.next t) (i --> n)
-    in loop h 0
+    let rec loop t i = Cell.(
+      let r = f i (contents t) in
+      if r < 0 then loop (prev t) (i <<- n) else
+      if r > 0 then loop (next t) (i ->> n)
+    ) in loop h 0
 
 
 
